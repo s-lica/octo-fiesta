@@ -16,7 +16,7 @@ public class SquidWTFStartupValidator : BaseStartupValidator
     public override string ServiceName => "SquidWTF";
 
     public SquidWTFStartupValidator(
-        IOptions<SquidWTFSettings> settings, 
+        IOptions<SquidWTFSettings> settings,
         HttpClient httpClient,
         IServiceProvider serviceProvider)
         : base(httpClient)
@@ -75,6 +75,7 @@ public class SquidWTFStartupValidator : BaseStartupValidator
             else if (source.Equals("JioSaavn", StringComparison.OrdinalIgnoreCase))
             {
                 return await ValidateJioSaavnAsync(cancellationToken);
+            }
             else if (source.Equals("Deemix", StringComparison.OrdinalIgnoreCase))
             {
                 return await ValidateDeemixAsync(cancellationToken);
@@ -174,16 +175,23 @@ public class SquidWTFStartupValidator : BaseStartupValidator
             WriteDetail(ex.Message);
             return ValidationResult.Failure("-1", $"Cannot connect to JioSaavn SquidWTF: {ex.Message}");
         }
+    }
+
     private async Task<ValidationResult> ValidateDeemixAsync(CancellationToken cancellationToken)
     {
         var response = await _httpClient.GetAsync("https://deemix.squid.wtf/api/health", cancellationToken);
         if (!response.IsSuccessStatusCode)
+        {
             return ValidationResult.Failure($"{response.StatusCode}", "Deemix SquidWTF returned error code");
+        }
 
         using var document = JsonDocument.Parse(await response.Content.ReadAsStreamAsync(cancellationToken));
-        var authenticated = document.RootElement.TryGetProperty("authenticated", out var value) && value.ValueKind == JsonValueKind.True;
+        var authenticated = document.RootElement.TryGetProperty("authenticated", out var value)
+            && value.ValueKind == JsonValueKind.True;
         WriteStatus("SquidWTF API", authenticated ? "REACHABLE" : "UNAUTHENTICATED", authenticated ? ConsoleColor.Green : ConsoleColor.Yellow);
-        WriteDetail(authenticated ? "Shared Deezer session pool is available - powered by Deemix" : "Deemix is reachable but has no authenticated Deezer session");
+        WriteDetail(authenticated
+            ? "Shared Deezer session pool is available - powered by Deemix"
+            : "Deemix is reachable but has no authenticated Deezer session");
         return authenticated
             ? ValidationResult.Success("SquidWTF Deemix validation completed")
             : ValidationResult.Failure("AUTH_REQUIRED", "Deemix has no authenticated session");
@@ -200,16 +208,16 @@ public class SquidWTFStartupValidator : BaseStartupValidator
             }, cancellationToken);
 
             var currentInstance = _instanceManager.GetCurrentInstance();
-            
+
             if (response.IsSuccessStatusCode)
             {
                 WriteStatus("SquidWTF API", "REACHABLE", ConsoleColor.Green);
                 WriteStatus("Active Instance", currentInstance ?? "unknown", ConsoleColor.Cyan);
                 WriteDetail("No authentication required - powered by Tidal");
-                
+
                 // Try a test search to verify functionality
                 await ValidateSearchFunctionality(cancellationToken);
-                
+
                 return ValidationResult.Success("SquidWTF Tidal validation completed");
             }
             else
@@ -253,8 +261,8 @@ public class SquidWTFStartupValidator : BaseStartupValidator
                 if (searchResponse.IsSuccessStatusCode)
                 {
                     var json = await searchResponse.Content.ReadAsStringAsync(cancellationToken);
-                    var doc = JsonDocument.Parse(json);
-                    
+                    using var doc = JsonDocument.Parse(json);
+
                     if (doc.RootElement.TryGetProperty("data", out var data) &&
                         data.TryGetProperty("items", out var items))
                     {
@@ -319,6 +327,9 @@ public class SquidWTFStartupValidator : BaseStartupValidator
                 "48KBPS" or "48" => ("48 kbps AAC", false),
                 "12KBPS" or "12" or "LOW" => ("12 kbps AAC", false),
                 _ => ("320 kbps AAC (default)", true)
+            };
+        }
+
         if (source.Equals("Deemix", StringComparison.OrdinalIgnoreCase))
         {
             return quality switch
